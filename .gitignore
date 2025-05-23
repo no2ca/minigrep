@@ -1,0 +1,16 @@
+# Rust build output
+/target/
+
+# IDE / Editor specific files
+**/*.rs.bk
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# By Cargo
+Cargo.lock
+
+# Misc
+.DS_Store
+Thumbs.db
