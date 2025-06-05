@@ -1,43 +1,34 @@
 use std::error::Error;
 use std::fs::File;
 use std::io::prelude::*;
-use std::env;
+use clap::Parser;
 
 // 外から使うため pub を使う
-pub struct Config {
+
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+pub struct Args {
+    #[arg(short, long)]
     pub query: String,
+
+    #[arg(short, long)]
     pub filename: String,
-    pub case_sensitive: bool,
-}
 
-impl Config {
-    pub fn new(args: &[String]) -> Result<Config, &'static str> {
-        // 引数が3未満のとき
-        if args.len() < 3 {
-            return Err("not enough arguments");
-        }
-        let query = args[1].clone();
-        let filename = args[2].clone();
-
-        // 設定されている場合は true を返す（デフォルトでは設定されていないので case insensitive）
-        // `$env:CASE_INSENSITIVE=1`で設定されている
-        let case_sensitive = env::var("CASE_INSENSITIVE").is_err();
-
-        Ok(Config { query, filename, case_sensitive })
-    }
+    #[arg(short, long)]
+    pub ignore_case: bool,
 }
 
 // BoxはErrorトレイトを実装する型を返すことを意味する
-pub fn run(config: Config) -> Result<(), Box<dyn Error>>{
-    let mut f = File::open(config.filename)?;
+pub fn run(args: Args) -> Result<(), Box<dyn Error>>{
+    let mut f = File::open(args.filename)?;
     
     let mut contents = String::new();
     f.read_to_string(&mut contents)?;
 
-    let results = if config.case_sensitive {
-        search(&config.query, &contents)
+    let results = if args.ignore_case {
+        search_case_insensitive(&args.query, &contents)
     } else {
-        search_case_insensitive(&config.query, &contents)
+        search(&args.query, &contents)
     };
 
     for line in results {
