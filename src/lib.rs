@@ -8,14 +8,18 @@ use clap::Parser;
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 pub struct Args {
-    #[arg(index=1)]
+    #[arg(index = 1)]
     pub query: String,
 
-    #[arg(index=2)]
+    #[arg(index = 2)]
     pub filename: String,
 
-    #[arg(short, long)]
+    #[arg(short = 'i', long = "ignore-case")]
     pub ignore_case: bool,
+
+    #[arg(short = 'n', long = "line-number")]
+    pub line_number: bool,
+
 }
 
 // BoxはErrorトレイトを実装する型を返すことを意味する
