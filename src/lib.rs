@@ -1,7 +1,7 @@
 use std::error::Error;
 use std::fs::File;
 use std::io::prelude::*;
-use clap::Parser;
+use clap::{Parser};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -34,41 +34,50 @@ impl SearchConfig {
     }
 }
 
-
 // search関数の定義
-pub fn search<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {
-    let mut results = Vec::new();
-    for line in contents.lines() {
-        if line.contains(query) {
-            results.push(line);
-        }
-    }
-    results
-}
+pub fn search<'a>(
+    query: &str,  
+    contents: &'a str,
+    config: &SearchConfig
+) -> Vec<String> {
+    contents
+        .lines() 
+        .enumerate() 
+        .filter(|(_, line)| {
+            let line_to_check = if config.ignore_case {
+                line.to_lowercase()
+            } else {
+                line.to_string()
+            };
 
-pub fn search_case_insensitive<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {
-    let mut results = Vec::new();
-    let query = query.to_lowercase();
-    for line in contents.lines() {
-        if line.to_lowercase().contains(&query) {
-            results.push(line);
-        }
-    }
-    results
+            let query_to_check = if config.ignore_case {
+                query.to_lowercase()
+            } else {
+                query.to_string()
+            };
+            // 含むものだけ返す
+            line_to_check.contains(&query_to_check)
+        })
+        .map(|(line_num, line)| {
+            if config.line_number {
+                format!("{}:{}", line_num + 1, line)
+            } else {
+                line.to_string()
+            }
+        })
+        // 最終的な出力を Vec<String> で返す
+        .collect()
 }
 
 // BoxはErrorトレイトを実装する型を返すことを意味する
 pub fn run(args: Args) -> Result<(), Box<dyn Error>>{
-    let mut f = File::open(args.filename)?;
+    let mut f = File::open(&args.filename)?;
     
     let mut contents = String::new();
     f.read_to_string(&mut contents)?;
 
-    let results = if args.ignore_case {
-        search_case_insensitive(&args.query, &contents)
-    } else {
-        search(&args.query, &contents)
-    };
+    let config = SearchConfig::from_args(&args);
+    let results = search(&args.query, &contents, &config);
 
     for line in results {
         println!("{}", line);
@@ -92,11 +101,15 @@ safe, fast, productive.
 Pick three.
 Duct tape";
 
+        let config = SearchConfig {
+            ignore_case: false,
+            line_number: false,
+        };
+
         assert_eq!(
             vec!["safe, fast, productive."],
-            search(query, contents)
+            search(query, contents, &config)
         );
-
     }
 
     #[test]
@@ -107,11 +120,53 @@ Rust:
 safe, fast, productive.
 Trust me.";
 
+        let config = SearchConfig {
+            ignore_case: true,
+            line_number: false,
+        };
+
         assert_eq!(
             vec!["Rust:", "Trust me."],
-            search_case_insensitive(query, contents)
+            search(query, contents, &config)
         );
+    }
 
+    #[test]
+    fn with_line_number() {
+        let query = "fast";
+        let contents = "\
+Rust:
+safe, fast, productive.
+Pick three.";
+
+        let config = SearchConfig {
+            ignore_case: false,
+            line_number: true,
+        };
+
+        assert_eq!(
+            vec!["2:safe, fast, productive."],
+            search(query, contents, &config)
+        );
+    }
+
+    #[test]
+    fn case_insensitive_with_line_number() {
+        let query = "rust";
+        let contents = "\
+Rust:
+safe, fast, productive.
+Trust me.";
+
+        let config = SearchConfig {
+            ignore_case: true,
+            line_number: true,
+        };
+
+        assert_eq!(
+            vec!["1:Rust:", "3:Trust me."],
+            search(query, contents, &config)
+        );
     }
 
     // clapによる引数パースのテスト
