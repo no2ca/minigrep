@@ -1,43 +1,34 @@
 use std::error::Error;
 use std::fs::File;
 use std::io::prelude::*;
-use std::env;
+use clap::Parser;
 
 // 外から使うため pub を使う
-pub struct Config {
+
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+pub struct Args {
+    #[arg(index=1)]
     pub query: String,
+
+    #[arg(index=2)]
     pub filename: String,
-    pub case_sensitive: bool,
-}
 
-impl Config {
-    pub fn new(args: &[String]) -> Result<Config, &'static str> {
-        // 引数が3未満のとき
-        if args.len() < 3 {
-            return Err("not enough arguments");
-        }
-        let query = args[1].clone();
-        let filename = args[2].clone();
-
-        // 設定されている場合は true を返す（デフォルトでは設定されていないので case insensitive）
-        // `$env:CASE_INSENSITIVE=1`で設定されている
-        let case_sensitive = env::var("CASE_INSENSITIVE").is_err();
-
-        Ok(Config { query, filename, case_sensitive })
-    }
+    #[arg(short, long)]
+    pub ignore_case: bool,
 }
 
 // BoxはErrorトレイトを実装する型を返すことを意味する
-pub fn run(config: Config) -> Result<(), Box<dyn Error>>{
-    let mut f = File::open(config.filename)?;
+pub fn run(args: Args) -> Result<(), Box<dyn Error>>{
+    let mut f = File::open(args.filename)?;
     
     let mut contents = String::new();
     f.read_to_string(&mut contents)?;
 
-    let results = if config.case_sensitive {
-        search(&config.query, &contents)
+    let results = if args.ignore_case {
+        search_case_insensitive(&args.query, &contents)
     } else {
-        search_case_insensitive(&config.query, &contents)
+        search(&args.query, &contents)
     };
 
     for line in results {
@@ -100,9 +91,66 @@ safe, fast, productive.
 Trust me.";
 
         assert_eq!(
-            vec!["Rust", "Trust, me."],
-            search(query, contents)
+            vec!["Rust:", "Trust me."],
+            search_case_insensitive(query, contents)
         );
 
+    }
+
+    // clapによる引数パースのテスト
+    #[test]
+    fn parse_args_basic() {
+        let args = Args::try_parse_from(&["minigrep", "test", "sample.txt"]).unwrap();
+        assert_eq!(args.query, "test");
+        assert_eq!(args.filename, "sample.txt");
+        assert_eq!(args.ignore_case, false);
+    }
+
+    #[test]
+    fn parse_args_with_ignore_case_short() {
+        let args = Args::try_parse_from(&["minigrep", "test", "sample.txt", "-i"]).unwrap();
+        assert_eq!(args.query, "test");
+        assert_eq!(args.filename, "sample.txt");
+        assert_eq!(args.ignore_case, true);
+    }
+
+    #[test]
+    fn parse_args_with_ignore_case_long() {
+        let args = Args::try_parse_from(&["minigrep", "test", "sample.txt", "--ignore-case"]).unwrap();
+        assert_eq!(args.query, "test");
+        assert_eq!(args.filename, "sample.txt");
+        assert_eq!(args.ignore_case, true);
+    }
+
+    #[test]
+    fn parse_args_flag_before_positional() {
+        let args = Args::try_parse_from(&["minigrep", "-i", "test", "sample.txt"]).unwrap();
+        assert_eq!(args.query, "test");
+        assert_eq!(args.filename, "sample.txt");
+        assert_eq!(args.ignore_case, true);
+    }
+
+    #[test]
+    fn parse_args_missing_filename() {
+        let result = Args::try_parse_from(&["minigrep", "test"]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_args_missing_query() {
+        let result = Args::try_parse_from(&["minigrep"]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_args_too_many_args() {
+        let result = Args::try_parse_from(&["minigrep", "test", "sample.txt", "extra"]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_args_unknown_flag() {
+        let result = Args::try_parse_from(&["minigrep", "test", "sample.txt", "--unknown"]);
+        assert!(result.is_err());
     }
 }
