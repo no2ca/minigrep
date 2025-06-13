@@ -27,6 +27,6 @@ cargo run <検索文字列> <ファイル名>
 Clapライブラリにより、フラグを位置引数の前後どちらでも指定できます。
 
 ```bash
-cargo run -i rust poem.txt
-cargo run rust poem.txt -i
+cargo run -i the poem.txt
+cargo run the poem.txt -i
 ```
