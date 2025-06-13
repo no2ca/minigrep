@@ -3,8 +3,6 @@ use std::fs::File;
 use std::io::prelude::*;
 use clap::Parser;
 
-// 外から使うため pub を使う
-
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 pub struct Args {
@@ -22,25 +20,20 @@ pub struct Args {
 
 }
 
-// BoxはErrorトレイトを実装する型を返すことを意味する
-pub fn run(args: Args) -> Result<(), Box<dyn Error>>{
-    let mut f = File::open(args.filename)?;
-    
-    let mut contents = String::new();
-    f.read_to_string(&mut contents)?;
-
-    let results = if args.ignore_case {
-        search_case_insensitive(&args.query, &contents)
-    } else {
-        search(&args.query, &contents)
-    };
-
-    for line in results {
-        println!("{}", line);
-    }
-
-    Ok(())
+pub struct SearchConfig {
+    pub ignore_case: bool,
+    pub line_number: bool,
 }
+
+impl SearchConfig {
+    pub fn from_args(args: &Args) -> Self {
+        Self {
+            ignore_case: args.ignore_case,
+            line_number: args.line_number,
+        }
+    }
+}
+
 
 // search関数の定義
 pub fn search<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {
@@ -62,6 +55,26 @@ pub fn search_case_insensitive<'a>(query: &str, contents: &'a str) -> Vec<&'a st
         }
     }
     results
+}
+
+// BoxはErrorトレイトを実装する型を返すことを意味する
+pub fn run(args: Args) -> Result<(), Box<dyn Error>>{
+    let mut f = File::open(args.filename)?;
+    
+    let mut contents = String::new();
+    f.read_to_string(&mut contents)?;
+
+    let results = if args.ignore_case {
+        search_case_insensitive(&args.query, &contents)
+    } else {
+        search(&args.query, &contents)
+    };
+
+    for line in results {
+        println!("{}", line);
+    }
+
+    Ok(())
 }
 
 // 大文字小文字を区別しないsearch関数用のテスト
