@@ -8,10 +8,10 @@ use clap::Parser;
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 pub struct Args {
-    #[arg(short, long)]
+    #[arg(index=1)]
     pub query: String,
 
-    #[arg(short, long)]
+    #[arg(index=2)]
     pub filename: String,
 
     #[arg(short, long)]
@@ -91,9 +91,66 @@ safe, fast, productive.
 Trust me.";
 
         assert_eq!(
-            vec!["Rust", "Trust, me."],
-            search(query, contents)
+            vec!["Rust:", "Trust me."],
+            search_case_insensitive(query, contents)
         );
 
+    }
+
+    // clapによる引数パースのテスト
+    #[test]
+    fn parse_args_basic() {
+        let args = Args::try_parse_from(&["minigrep", "test", "sample.txt"]).unwrap();
+        assert_eq!(args.query, "test");
+        assert_eq!(args.filename, "sample.txt");
+        assert_eq!(args.ignore_case, false);
+    }
+
+    #[test]
+    fn parse_args_with_ignore_case_short() {
+        let args = Args::try_parse_from(&["minigrep", "test", "sample.txt", "-i"]).unwrap();
+        assert_eq!(args.query, "test");
+        assert_eq!(args.filename, "sample.txt");
+        assert_eq!(args.ignore_case, true);
+    }
+
+    #[test]
+    fn parse_args_with_ignore_case_long() {
+        let args = Args::try_parse_from(&["minigrep", "test", "sample.txt", "--ignore-case"]).unwrap();
+        assert_eq!(args.query, "test");
+        assert_eq!(args.filename, "sample.txt");
+        assert_eq!(args.ignore_case, true);
+    }
+
+    #[test]
+    fn parse_args_flag_before_positional() {
+        let args = Args::try_parse_from(&["minigrep", "-i", "test", "sample.txt"]).unwrap();
+        assert_eq!(args.query, "test");
+        assert_eq!(args.filename, "sample.txt");
+        assert_eq!(args.ignore_case, true);
+    }
+
+    #[test]
+    fn parse_args_missing_filename() {
+        let result = Args::try_parse_from(&["minigrep", "test"]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_args_missing_query() {
+        let result = Args::try_parse_from(&["minigrep"]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_args_too_many_args() {
+        let result = Args::try_parse_from(&["minigrep", "test", "sample.txt", "extra"]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_args_unknown_flag() {
+        let result = Args::try_parse_from(&["minigrep", "test", "sample.txt", "--unknown"]);
+        assert!(result.is_err());
     }
 }
