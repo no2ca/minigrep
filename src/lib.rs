@@ -67,6 +67,7 @@ pub fn search<'a>(
         .filter_map(|(line_num, line)| {
             let matches = match_line(line, &processed_query, config);
 
+            // 該当する行が無いならNoneを返す
             if matches ^ config.invert_match {
                 Some((line_num, line))
             } else {
@@ -85,7 +86,7 @@ fn match_line(line: &str, query: &str, config: &SearchConfig) -> bool {
     };
 
     if config.regex {
-        unimplemented!("regex")
+        regex::Regex::new(query).unwrap().is_match(&line_to_check)
     } else if config.whole_word {
         line_to_check.split_whitespace().any(|word| word == query)
     } else {
