@@ -408,4 +408,49 @@ Python programming";
             search(query, contents, &config)
         );
     }
+
+    #[test]
+    fn regex_basic() {
+        let query = r"r.st";
+        let contents = "\
+Rust programming
+Python code
+Trust me
+rest well";
+
+        let config = SearchConfig {
+            ignore_case: false,
+            line_number: false,
+            invert_match: false,
+            whole_word: false,
+            regex: true,
+        };
+
+        assert_eq!(
+            vec!["Trust me", "rest well"],
+            search(query, contents, &config)
+        );
+    }
+
+    #[test]
+    fn regex_case_insensitive() {
+        let query = r"RUST";
+        let contents = "\
+Rust programming
+Python code
+Trust with rust";
+
+        let config = SearchConfig {
+            ignore_case: true,
+            line_number: false,
+            invert_match: false,
+            whole_word: false,  
+            regex: true,
+        };
+
+        assert_eq!(
+            vec!["Rust programming", "Trust with rust"],
+            search(query, contents, &config)
+        );
+    }  
 }
