@@ -55,30 +55,40 @@ pub fn search<'a>(
     query: &str,  
     contents: &'a str,
     config: &SearchConfig
-) -> Vec<String> {
+) -> Result<Vec<String>, Box<dyn Error>> {
     let processed_query = if config.ignore_case {
         query.to_lowercase()
     } else {
         query.to_string()
     };
-    contents
+    let results: Result<Vec<String>, Box<dyn Error>> = contents
         .lines() 
         .enumerate() 
         .filter_map(|(line_num, line)| {
-            let matches = match_line(line, &processed_query, config);
-
-            // 該当する行が無いならNoneを返す
-            if matches ^ config.invert_match {
-                Some((line_num, line))
-            } else {
-                None
+            match match_line(line, &processed_query, config) {
+                Ok(matches) => {
+                    // 該当する行が無いならNoneを返す
+                    if matches ^ config.invert_match {
+                        Some(Ok((line_num, line)))
+                    } else {
+                        None
+                    }
+                }
+                Err(e) => Some(Err(e))
             }
         })
-        .map(|(line_num, line)| format_output(line_num, line, config))
-        .collect()
+        .collect::<Result<Vec<_>, _>>()
+        .map(|pairs| {
+            pairs.into_iter()
+                .map(|(line_num, line)| format_output(line_num, line, config))
+                .collect()
+        });
+
+        results
+        
 }
 
-fn match_line(line: &str, query: &str, config: &SearchConfig) -> bool {
+fn match_line(line: &str, query: &str, config: &SearchConfig) -> Result<bool, Box<dyn Error>> {
     let line_to_check = if config.ignore_case {
         line.to_lowercase()
     } else {
@@ -86,11 +96,12 @@ fn match_line(line: &str, query: &str, config: &SearchConfig) -> bool {
     };
 
     if config.regex {
-        regex::Regex::new(query).unwrap().is_match(&line_to_check)
+        let regex = regex::Regex::new(query)?;
+        Ok(regex.is_match(&line_to_check))
     } else if config.whole_word {
-        line_to_check.split_whitespace().any(|word| word == query)
+        Ok(line_to_check.split_whitespace().any(|word| word == query))
     } else {
-        line_to_check.contains(query)
+        Ok(line_to_check.contains(query))
     }
 }
 
@@ -110,7 +121,7 @@ pub fn run(args: Args) -> Result<(), Box<dyn Error>>{
     f.read_to_string(&mut contents)?;
 
     let config = SearchConfig::from_args(&args);
-    let results = search(&args.query, &contents, &config);
+    let results = search(&args.query, &contents, &config)?;
 
     for line in results {
         println!("{}", line);
@@ -144,7 +155,7 @@ Duct tape";
 
         assert_eq!(
             vec!["safe, fast, productive."],
-            search(query, contents, &config)
+            search(query, contents, &config).unwrap()
         );
     }
 
@@ -166,7 +177,7 @@ Trust me.";
 
         assert_eq!(
             vec!["Rust:", "Trust me."],
-            search(query, contents, &config)
+            search(query, contents, &config).unwrap()
         );
     }
 
@@ -188,7 +199,7 @@ Pick three.";
 
         assert_eq!(
             vec!["2:safe, fast, productive."],
-            search(query, contents, &config)
+            search(query, contents, &config).unwrap()
         );
     }
 
@@ -210,7 +221,7 @@ Trust me.";
 
         assert_eq!(
             vec!["1:Rust:", "3:Trust me."],
-            search(query, contents, &config)
+            search(query, contents, &config).unwrap()
         );
     }
 
@@ -290,7 +301,7 @@ Trust me.";
 
         assert_eq!(
             vec!["Rust:", "Pick three.", "Trust me."],
-            search(query, contents, &config)
+            search(query, contents, &config).unwrap()
         );
     }
 
@@ -313,7 +324,7 @@ Trust me.";
 
         assert_eq!(
             vec!["1:Rust:", "3:Pick three.", "4:Trust me."],
-            search(query, contents, &config)
+            search(query, contents, &config).unwrap()
         );
     }
 
@@ -336,7 +347,7 @@ rusty old car";
 
         assert_eq!(
             vec!["Rust language", "Trust me with rust", "rust is great"],
-            search(query, contents, &config)
+            search(query, contents, &config).unwrap()
         );
     }
 
@@ -358,7 +369,7 @@ scar on my arm";
 
         assert_eq!(
             vec!["Careful with the car"],
-            search(query, contents, &config)
+            search(query, contents, &config).unwrap()
         );
     }
 
@@ -381,7 +392,7 @@ Welcome to the party";
 
         assert_eq!(
             vec!["1:Trust me", "3:Meet me at home"],
-            search(query, contents, &config)
+            search(query, contents, &config).unwrap()
         );
     }
 
@@ -405,7 +416,7 @@ Python programming";
 
         assert_eq!(
             vec!["rusty old car", "Python programming"],
-            search(query, contents, &config)
+            search(query, contents, &config).unwrap()
         );
     }
 
@@ -428,7 +439,7 @@ rest well";
 
         assert_eq!(
             vec!["Trust me", "rest well"],
-            search(query, contents, &config)
+            search(query, contents, &config).unwrap()
         );
     }
 
@@ -450,7 +461,47 @@ Trust with rust";
 
         assert_eq!(
             vec!["Rust programming", "Trust with rust"],
-            search(query, contents, &config)
+            search(query, contents, &config).unwrap()
         );
     }  
+    #[test]
+    fn invalid_regex_should_return_error() {
+        // 不正な正規表現の例： `*` は何かに続く必要があるが、単独で使われている
+        let query = r"*";
+        let contents = "some text\nto search through";
+
+        let config = SearchConfig {
+            ignore_case: false,
+            line_number: false,
+            invert_match: false,
+            whole_word: false,
+            regex: true, // regex モードは有効
+        };
+
+        // search関数は Result を返すと仮定
+        let result = search(query, contents, &config);
+
+        // 戻り値が Err であることを確認する
+        assert!(result.is_err(), "Expected an error for invalid regex, but got Ok");
+
+    }
+
+    #[test]
+    fn search_in_empty_contents() {
+        let query = "a";
+        let contents = ""; // 検索対象が空
+        let config = SearchConfig {
+            ignore_case: false,
+            line_number: false,
+            invert_match: false,
+            whole_word: false,
+            regex: true,
+        };
+
+        assert_eq!(
+            Vec::<&str>::new(), // 空のベクタが返されることを期待
+            search(query, contents, &config).unwrap() // このケースは成功するので unwrap してOK
+        );
+    }
+
 }
