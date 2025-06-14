@@ -18,11 +18,24 @@ pub struct Args {
     #[arg(short = 'n', long = "line-number")]
     pub line_number: bool,
 
+    #[arg(short = 'v', long = "invert-match")]
+    pub invert_match: bool,
+
+    #[arg(short = 'w', long = "whole-word")]
+    pub whole_word: bool,
+
+    #[arg(short = 'E', long = "regex")]
+    pub regex: bool,
+
 }
 
+#[derive(Debug, Clone)]
 pub struct SearchConfig {
     pub ignore_case: bool,
     pub line_number: bool,
+    pub invert_match: bool,
+    pub whole_word: bool,
+    pub regex: bool,
 }
 
 impl SearchConfig {
@@ -30,6 +43,9 @@ impl SearchConfig {
         Self {
             ignore_case: args.ignore_case,
             line_number: args.line_number,
+            invert_match: args.invert_match,
+            whole_word: args.whole_word,
+            regex: args.regex,
         }
     }
 }
@@ -40,33 +56,49 @@ pub fn search<'a>(
     contents: &'a str,
     config: &SearchConfig
 ) -> Vec<String> {
+    let processed_query = if config.ignore_case {
+        query.to_lowercase()
+    } else {
+        query.to_string()
+    };
     contents
         .lines() 
         .enumerate() 
-        .filter(|(_, line)| {
-            let line_to_check = if config.ignore_case {
-                line.to_lowercase()
-            } else {
-                line.to_string()
-            };
+        .filter_map(|(line_num, line)| {
+            let matches = match_line(line, &processed_query, config);
 
-            let query_to_check = if config.ignore_case {
-                query.to_lowercase()
+            if matches ^ config.invert_match {
+                Some((line_num, line))
             } else {
-                query.to_string()
-            };
-            // 含むものだけ返す
-            line_to_check.contains(&query_to_check)
-        })
-        .map(|(line_num, line)| {
-            if config.line_number {
-                format!("{}:{}", line_num + 1, line)
-            } else {
-                line.to_string()
+                None
             }
         })
-        // 最終的な出力を Vec<String> で返す
+        .map(|(line_num, line)| format_output(line_num, line, config))
         .collect()
+}
+
+fn match_line(line: &str, query: &str, config: &SearchConfig) -> bool {
+    let line_to_check = if config.ignore_case {
+        line.to_lowercase()
+    } else {
+        line.to_string()
+    };
+
+    if config.regex {
+        unimplemented!("regex")
+    } else if config.whole_word {
+        line_to_check.split_whitespace().any(|word| word == query)
+    } else {
+        line_to_check.contains(query)
+    }
+}
+
+fn format_output(line_num: usize, line: &str, config: &SearchConfig) -> String {
+    if config.line_number {
+        format!("{}:{}", line_num + 1, line)
+    } else {
+        line.to_string()
+    }
 }
 
 // BoxはErrorトレイトを実装する型を返すことを意味する
@@ -104,6 +136,9 @@ Duct tape";
         let config = SearchConfig {
             ignore_case: false,
             line_number: false,
+            invert_match: false,
+            whole_word: false,
+            regex: false,
         };
 
         assert_eq!(
@@ -123,6 +158,9 @@ Trust me.";
         let config = SearchConfig {
             ignore_case: true,
             line_number: false,
+            invert_match: false,
+            whole_word: false,
+            regex: false,
         };
 
         assert_eq!(
@@ -142,6 +180,9 @@ Pick three.";
         let config = SearchConfig {
             ignore_case: false,
             line_number: true,
+            invert_match: false,
+            whole_word: false,
+            regex: false,
         };
 
         assert_eq!(
@@ -161,6 +202,9 @@ Trust me.";
         let config = SearchConfig {
             ignore_case: true,
             line_number: true,
+            invert_match: false,
+            whole_word: false,
+            regex: false,
         };
 
         assert_eq!(
@@ -224,5 +268,143 @@ Trust me.";
     fn parse_args_unknown_flag() {
         let result = Args::try_parse_from(&["minigrep", "test", "sample.txt", "--unknown"]);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn invert_match() {
+        let query = "fast";
+        let contents = "\
+Rust:
+safe, fast, productive.
+Pick three.
+Trust me.";
+
+        let config = SearchConfig {
+            ignore_case: false,
+            line_number: false,
+            invert_match: true,
+            whole_word: false,
+            regex: false,
+        };
+
+        assert_eq!(
+            vec!["Rust:", "Pick three.", "Trust me."],
+            search(query, contents, &config)
+        );
+    }
+
+    #[test]
+    fn invert_match_with_line_number() {
+        let query = "fast";
+        let contents = "\
+Rust:
+safe, fast, productive.
+Pick three.
+Trust me.";
+
+        let config = SearchConfig {
+            ignore_case: false,
+            line_number: true,
+            invert_match: true,
+            whole_word: false,
+            regex: false,
+        };
+
+        assert_eq!(
+            vec!["1:Rust:", "3:Pick three.", "4:Trust me."],
+            search(query, contents, &config)
+        );
+    }
+
+    #[test]
+    fn whole_word_match() {
+        let query = "rust";
+        let contents = "\
+Rust language
+Trust me with rust
+rust is great
+rusty old car";
+
+        let config = SearchConfig {
+            ignore_case: true,
+            line_number: false,
+            invert_match: false,
+            whole_word: true,
+            regex: false,
+        };
+
+        assert_eq!(
+            vec!["Rust language", "Trust me with rust", "rust is great"],
+            search(query, contents, &config)
+        );
+    }
+
+    #[test]
+    fn whole_word_no_match() {
+        let query = "car";
+        let contents = "\
+I care about cars
+Careful with the car
+scar on my arm";
+
+        let config = SearchConfig {
+            ignore_case: false,
+            line_number: false,
+            invert_match: false,
+            whole_word: true,
+            regex: false,
+        };
+
+        assert_eq!(
+            vec!["Careful with the car"],
+            search(query, contents, &config)
+        );
+    }
+
+    #[test]
+    fn whole_word_with_line_number() {
+        let query = "me";
+        let contents = "\
+Trust me
+Some text here
+Meet me at home
+Welcome to the party";
+
+        let config = SearchConfig {
+            ignore_case: false,
+            line_number: true,
+            invert_match: false,
+            whole_word: true,
+            regex: false,
+        };
+
+        assert_eq!(
+            vec!["1:Trust me", "3:Meet me at home"],
+            search(query, contents, &config)
+        );
+    }
+
+    #[test]
+    fn invert_match_and_whole_word() {
+        let query = "rust";
+        let contents = "\
+Rust language
+Trust me with rust
+rust is great
+rusty old car
+Python programming";
+
+        let config = SearchConfig {
+            ignore_case: true,
+            line_number: false,
+            invert_match: true,
+            whole_word: true,
+            regex: false,
+        };
+
+        assert_eq!(
+            vec!["rusty old car", "Python programming"],
+            search(query, contents, &config)
+        );
     }
 }
