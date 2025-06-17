@@ -1,5 +1,6 @@
-use std::error::Error;
-use std::fs::File;
+use std::{error::Error, path::Path};
+use std::fs;
+use walkdir::WalkDir;
 use std::io::prelude::*;
 use clap::{Parser};
 
@@ -46,6 +47,18 @@ impl SearchConfig {
             invert_match: args.invert_match,
             whole_word: args.whole_word,
             regex: !args.no_regex, // --no-regexが指定されていない場合、正規表現を有効にする
+        }
+    }
+}
+
+pub fn search_recursive(root: &Path, query: &str, config: &SearchConfig) {
+    for entry in WalkDir::new(root)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().is_file())
+    {
+        if let Err(e) = search_in_file(entry.path(), query, config) {
+            eprintln!("Warning: {}: {}", entry.path().display(), e);
         }
     }
 }
@@ -113,10 +126,19 @@ fn format_output(line_num: usize, line: &str, config: &SearchConfig) -> String {
     }
 }
 
+pub fn search_in_file(file_path: &Path, query: &str, config: &SearchConfig) -> Result<(), Box<dyn Error>> {
+    let contents = fs::read_to_string(file_path)?;
+    let results = search(query, &contents, config)?;
+    for line in results {
+        println!("{}", line);
+    }
+    Ok(())
+}
+
 // BoxはErrorトレイトを実装する型を返すことを意味する
 pub fn run(args: Args) -> Result<(), Box<dyn Error>>{
-    let mut f = File::open(&args.filename)?;
-    
+    let mut f = fs::File::open(&args.filename)?;
+
     let mut contents = String::new();
     f.read_to_string(&mut contents)?;
 
