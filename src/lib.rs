@@ -153,7 +153,10 @@ fn match_line(line: &str, query: &str, config: &SearchConfig) -> Result<bool, Bo
         let regex = regex::Regex::new(&pattern)?;
         Ok(regex.is_match(&line_to_check))
     } else if config.whole_word {
-        Ok(line_to_check.split_whitespace().any(|word| word == query))
+        // regexが無効でwhole_wordが有効な場合: grepの仕様に合わせて単語境界を使用
+        let pattern = format!(r"\b{}\b", regex::escape(query));
+        let regex = regex::Regex::new(&pattern)?;
+        Ok(regex.is_match(&line_to_check))
     } else {
         Ok(line_to_check.contains(query))
     }
@@ -587,6 +590,34 @@ rusty old car";
         
         assert_eq!(
             vec!["Rust programming", "Trust with rust"],
+            result
+        );
+    }
+
+    #[test]
+    fn whole_word_with_punctuation() {
+        let query = "test";
+        let contents = "\
+This is a test.
+Testing phase
+test,case
+(test)
+test!
+testing123";
+
+        let config = SearchConfig {
+            ignore_case: false,
+            line_number: false,
+            invert_match: false,
+            whole_word: true,
+            regex: true,
+        };
+
+        let result = search(query, contents, &config).unwrap();
+        
+        // 句読点に囲まれた "test" も正しく検出されることを確認
+        assert_eq!(
+            vec!["This is a test.", "test,case", "(test)", "test!"],
             result
         );
     }
