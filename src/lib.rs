@@ -1,7 +1,6 @@
 use std::{error::Error, path::Path};
 use std::fs;
 use walkdir::WalkDir;
-use std::io::prelude::*;
 use clap::{Parser};
 
 #[derive(Parser, Debug)]
@@ -10,7 +9,7 @@ pub struct Args {
     #[arg(index = 1)]
     pub query: String,
 
-    #[arg(index = 2)]
+    #[arg(index = 2, default_value = ".")]
     pub filename: String,
 
     #[arg(short = 'i', long = "ignore-case")]
@@ -51,7 +50,7 @@ impl SearchConfig {
     }
 }
 
-pub fn search_recursive(root: &Path, query: &str, config: &SearchConfig) {
+pub fn search_recursive(root: &Path, query: &str, config: &SearchConfig) -> Result<(), Box<dyn Error>> {
     for entry in WalkDir::new(root)
         .into_iter()
         .filter_map(|e| e.ok())
@@ -61,6 +60,7 @@ pub fn search_recursive(root: &Path, query: &str, config: &SearchConfig) {
             eprintln!("Warning: {}: {}", entry.path().display(), e);
         }
     }
+    Ok(())
 }
 
 // search関数の定義
@@ -129,6 +129,7 @@ fn format_output(line_num: usize, line: &str, config: &SearchConfig) -> String {
 pub fn search_in_file(file_path: &Path, query: &str, config: &SearchConfig) -> Result<(), Box<dyn Error>> {
     let contents = fs::read_to_string(file_path)?;
     let results = search(query, &contents, config)?;
+    println!("{}", file_path.display());
     for line in results {
         println!("{}", line);
     }
@@ -137,16 +138,12 @@ pub fn search_in_file(file_path: &Path, query: &str, config: &SearchConfig) -> R
 
 // BoxはErrorトレイトを実装する型を返すことを意味する
 pub fn run(args: Args) -> Result<(), Box<dyn Error>>{
-    let mut f = fs::File::open(&args.filename)?;
-
-    let mut contents = String::new();
-    f.read_to_string(&mut contents)?;
-
+    let path = std::path::Path::new(&args.filename);
     let config = SearchConfig::from_args(&args);
-    let results = search(&args.query, &contents, &config)?;
-
-    for line in results {
-        println!("{}", line);
+    if path.is_dir() {
+        search_recursive(path, &args.query, &config)?;
+    } else {
+        search_in_file(path, &args.query, &config)?;
     }
 
     Ok(())
@@ -282,8 +279,9 @@ Trust me.";
 
     #[test]
     fn parse_args_missing_filename() {
-        let result = Args::try_parse_from(&["minigrep", "test"]);
-        assert!(result.is_err());
+        let result = Args::try_parse_from(&["minigrep", "test"]).unwrap();
+        assert_eq!(result.query, "test");
+        assert_eq!(result.filename, ".");
     }
 
     #[test]
