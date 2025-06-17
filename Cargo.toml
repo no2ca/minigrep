@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 clap = { version = "4.5.39", features = ["derive"] }
+ignore = "0.4.23"
 rayon = "1.10.0"
 regex = "1.11.1"
 walkdir = "2.5.0"

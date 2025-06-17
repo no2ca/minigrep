@@ -1,13 +1,10 @@
+use ignore::WalkBuilder;
 use std::collections::VecDeque;
-use std::fs;
-use std::io::Read;
 use std::sync::Mutex;
 use std::{error::Error, path::Path};
-use std::fs::{File, read_to_string};
-use walkdir::WalkDir;
+use std::fs::read_to_string;
 use clap::{Parser};
 use rayon::prelude::*;
-// use std::sync::Mutex;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -56,66 +53,30 @@ impl SearchConfig {
     }
 }
 
-fn is_binary_file(path: &Path) -> Result<bool, std::io::Error> {
-    let mut file = File::open(path)?;
-    let mut buffer = [0; 1024];
-    let bytes_read = file.read(&mut buffer)?;
-    // NULL文字が含まれていたらバイナリファイルとみなす
-    Ok(buffer[..bytes_read].contains(&0))
-}
-
-fn should_search_file(path: &Path) -> bool {
-    if let Ok(metadata) = fs::metadata(path) {
-        if metadata.len() > 10 * 1024 * 1024 {
-            return false;
-        }
-    }
-
-    match is_binary_file(path) {
-        Ok(is_binary) => !is_binary,
-        Err(_) => false,
-    }
-}
-
 pub fn search_recursive(root: &Path, query: &str, config: &SearchConfig) -> Result<(), Box<dyn Error>> {
-    let files: Vec<_> = WalkDir::new(root)
-        .into_iter()
-        .filter_entry(|e| {
-            if e.file_type().is_dir() {
-                if e.depth() == 0 {
-                    return true;
-                }
-                else if let Some(name) = e.file_name().to_str() {
-                    return  !name.starts_with('.');
-                }
-            }
-            true
-        })
-        .filter_map(|e| e.ok())
-        .filter(|e| e.file_type().is_file())
-        .filter(|e| should_search_file(e.path()))
+    let files: Vec<_> = WalkBuilder::new(root)
+        .hidden(false)
+        .git_ignore(true)
+        .build()  
+        .filter_map(|result| result.ok())
+        .filter(|entry| entry.file_type().map_or(false, |ft| ft.is_file()))
+        .map(|entry| entry.path().to_path_buf())
         .collect();
-    
-    // 出力をバッファに集める
-    let output_buffer:Mutex<VecDeque<(std::path::PathBuf, Vec<String>)>> = Mutex::new(VecDeque::new());
 
-    files.par_iter().for_each(|entry|{
-        if let Ok(file_results) = search_in_file(entry.path(), query, config) {
+    let output_buffer = Mutex::new(VecDeque::new());
+
+    files.par_iter().for_each(|file_path| {
+        if let Ok(file_results) = search_in_file(file_path, query, config) {
             if !file_results.is_empty() {
                 let mut buffer = output_buffer.lock().unwrap();
-                buffer.push_back((entry.path().to_path_buf(), file_results));
+                buffer.push_back((file_path.clone(), file_results));
             }
         }
-        /*
-        if let Err(e) = search_in_file(entry.path(), query, config) {
-            eprintln!("Warning: {}: {}", entry.path().display(), e);
-        }
-        */
     });
 
     let buffer = output_buffer.lock().unwrap();
-    for (file_path, results) in buffer.iter() {
-        println!("In file: {}", file_path.display());
+    for (_file_path, results) in buffer.iter() {
+        // println!("In file: {}", file_path.display());
         for line in results {
             println!("{}", line);
         }
