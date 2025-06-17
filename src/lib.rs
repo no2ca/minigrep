@@ -144,7 +144,13 @@ fn match_line(line: &str, query: &str, config: &SearchConfig) -> Result<bool, Bo
     };
 
     if config.regex {
-        let regex = regex::Regex::new(query)?;
+        let pattern = if config.whole_word {
+            // word boundaryを追加して単語境界を考慮した正規表現にする
+            format!(r"\b(?:{})\b", query)
+        } else {
+            query.to_string()
+        };
+        let regex = regex::Regex::new(&pattern)?;
         Ok(regex.is_match(&line_to_check))
     } else if config.whole_word {
         Ok(line_to_check.split_whitespace().any(|word| word == query))
@@ -353,7 +359,7 @@ Trust me.";
             line_number: false,
             invert_match: true,
             whole_word: false,
-            regex: false,
+            regex: true,
         };
 
         assert_eq!(
@@ -376,7 +382,7 @@ Trust me.";
             line_number: true,
             invert_match: true,
             whole_word: false,
-            regex: false,
+            regex: true,
         };
 
         assert_eq!(
@@ -399,7 +405,7 @@ rusty old car";
             line_number: false,
             invert_match: false,
             whole_word: true,
-            regex: false,
+            regex: true,
         };
 
         assert_eq!(
@@ -421,7 +427,7 @@ scar on my arm";
             line_number: false,
             invert_match: false,
             whole_word: true,
-            regex: false,
+            regex: true,
         };
 
         assert_eq!(
@@ -444,7 +450,7 @@ Welcome to the party";
             line_number: true,
             invert_match: false,
             whole_word: true,
-            regex: false,
+            regex: true,
         };
 
         assert_eq!(
@@ -468,7 +474,7 @@ Python programming";
             line_number: false,
             invert_match: true,
             whole_word: true,
-            regex: false,
+            regex: true,
         };
 
         assert_eq!(
@@ -558,6 +564,30 @@ Trust with rust";
         assert_eq!(
             Vec::<&str>::new(), // 空のベクタが返されることを期待
             search(query, contents, &config).unwrap() // このケースは成功するので unwrap してOK
+        );
+    }
+
+    #[test]
+    fn regex_with_whole_word() {
+        let query = "rust";
+        let contents = "\
+Rust programming
+Trust with rust
+rusty old car";
+
+        let config = SearchConfig {
+            ignore_case: true,
+            line_number: false,
+            invert_match: false,
+            whole_word: true,  // 単語境界マッチを有効
+            regex: true,       // 正規表現も有効
+        };
+
+        let result = search(query, contents, &config).unwrap();
+        
+        assert_eq!(
+            vec!["Rust programming", "Trust with rust"],
+            result
         );
     }
 
