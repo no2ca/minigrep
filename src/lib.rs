@@ -1,5 +1,7 @@
+use std::collections::VecDeque;
 use std::fs;
 use std::io::Read;
+use std::sync::Mutex;
 use std::{error::Error, path::Path};
 use std::fs::{File, read_to_string};
 use walkdir::WalkDir;
@@ -93,11 +95,32 @@ pub fn search_recursive(root: &Path, query: &str, config: &SearchConfig) -> Resu
         .filter(|e| e.file_type().is_file())
         .filter(|e| should_search_file(e.path()))
         .collect();
+    
+    // 出力をバッファに集める
+    let output_buffer:Mutex<VecDeque<(std::path::PathBuf, Vec<String>)>> = Mutex::new(VecDeque::new());
+
     files.par_iter().for_each(|entry|{
+        if let Ok(file_results) = search_in_file(entry.path(), query, config) {
+            if !file_results.is_empty() {
+                let mut buffer = output_buffer.lock().unwrap();
+                buffer.push_back((entry.path().to_path_buf(), file_results));
+            }
+        }
+        /*
         if let Err(e) = search_in_file(entry.path(), query, config) {
             eprintln!("Warning: {}: {}", entry.path().display(), e);
         }
+        */
     });
+
+    let buffer = output_buffer.lock().unwrap();
+    for (file_path, results) in buffer.iter() {
+        println!("In file: {}", file_path.display());
+        for line in results {
+            println!("{}", line);
+        }
+    }
+
     Ok(())
 }
 
@@ -173,16 +196,9 @@ fn format_output(line_num: usize, line: &str, config: &SearchConfig) -> String {
     }
 }
 
-pub fn search_in_file(file_path: &Path, query: &str, config: &SearchConfig) -> Result<(), Box<dyn Error>> {
+pub fn search_in_file(file_path: &Path, query: &str, config: &SearchConfig) -> Result<Vec<String>, Box<dyn Error>> {
     let contents = read_to_string(file_path)?;
-    let results = search(query, &contents, config)?;
-    if !results.is_empty() {
-        println!("In file: {}", file_path.display());
-    }
-    for line in results {
-        println!("{}", line);
-    }
-    Ok(())
+    search(query, &contents, config)
 }
 
 // BoxはErrorトレイトを実装する型を返すことを意味する
