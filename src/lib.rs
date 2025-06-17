@@ -4,6 +4,8 @@ use std::{error::Error, path::Path};
 use std::fs::{File, read_to_string};
 use walkdir::WalkDir;
 use clap::{Parser};
+use rayon::prelude::*;
+// use std::sync::Mutex;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -74,7 +76,7 @@ fn should_search_file(path: &Path) -> bool {
 }
 
 pub fn search_recursive(root: &Path, query: &str, config: &SearchConfig) -> Result<(), Box<dyn Error>> {
-    for entry in WalkDir::new(root)
+    let files: Vec<_> = WalkDir::new(root)
         .into_iter()
         .filter_entry(|e| {
             if e.file_type().is_dir() {
@@ -90,11 +92,12 @@ pub fn search_recursive(root: &Path, query: &str, config: &SearchConfig) -> Resu
         .filter_map(|e| e.ok())
         .filter(|e| e.file_type().is_file())
         .filter(|e| should_search_file(e.path()))
-    {
+        .collect();
+    files.par_iter().for_each(|entry|{
         if let Err(e) = search_in_file(entry.path(), query, config) {
             eprintln!("Warning: {}: {}", entry.path().display(), e);
         }
-    }
+    });
     Ok(())
 }
 
