@@ -24,8 +24,8 @@ pub struct Args {
     #[arg(short = 'w', long = "whole-word")]
     pub whole_word: bool,
 
-    #[arg(short = 'E', long = "regex")]
-    pub regex: bool,
+    #[arg(short = 'F', long = "fixed-strings", help = "Disable regex mode")]
+    pub no_regex: bool,
 
 }
 
@@ -45,7 +45,7 @@ impl SearchConfig {
             line_number: args.line_number,
             invert_match: args.invert_match,
             whole_word: args.whole_word,
-            regex: args.regex,
+            regex: !args.no_regex, // --no-regexが指定されていない場合、正規表現を有効にする
         }
     }
 }
