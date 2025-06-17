@@ -1,5 +1,7 @@
-use std::{error::Error, path::Path};
 use std::fs;
+use std::io::Read;
+use std::{error::Error, path::Path};
+use std::fs::{File, read_to_string};
 use walkdir::WalkDir;
 use clap::{Parser};
 
@@ -50,11 +52,44 @@ impl SearchConfig {
     }
 }
 
+fn is_binary_file(path: &Path) -> Result<bool, std::io::Error> {
+    let mut file = File::open(path)?;
+    let mut buffer = [0; 1024];
+    let bytes_read = file.read(&mut buffer)?;
+    // NULL文字が含まれていたらバイナリファイルとみなす
+    Ok(buffer[..bytes_read].contains(&0))
+}
+
+fn should_search_file(path: &Path) -> bool {
+    if let Ok(metadata) = fs::metadata(path) {
+        if metadata.len() > 10 * 1024 * 1024 {
+            return false;
+        }
+    }
+
+    match is_binary_file(path) {
+        Ok(is_binary) => !is_binary,
+        Err(_) => false,
+    }
+}
+
 pub fn search_recursive(root: &Path, query: &str, config: &SearchConfig) -> Result<(), Box<dyn Error>> {
     for entry in WalkDir::new(root)
         .into_iter()
+        .filter_entry(|e| {
+            if e.file_type().is_dir() {
+                if e.depth() == 0 {
+                    return true;
+                }
+                else if let Some(name) = e.file_name().to_str() {
+                    return  !name.starts_with('.');
+                }
+            }
+            true
+        })
         .filter_map(|e| e.ok())
         .filter(|e| e.file_type().is_file())
+        .filter(|e| should_search_file(e.path()))
     {
         if let Err(e) = search_in_file(entry.path(), query, config) {
             eprintln!("Warning: {}: {}", entry.path().display(), e);
@@ -127,9 +162,11 @@ fn format_output(line_num: usize, line: &str, config: &SearchConfig) -> String {
 }
 
 pub fn search_in_file(file_path: &Path, query: &str, config: &SearchConfig) -> Result<(), Box<dyn Error>> {
-    let contents = fs::read_to_string(file_path)?;
+    let contents = read_to_string(file_path)?;
     let results = search(query, &contents, config)?;
-    println!("{}", file_path.display());
+    if !results.is_empty() {
+        println!("In file: {}", file_path.display());
+    }
     for line in results {
         println!("{}", line);
     }
