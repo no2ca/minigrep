@@ -154,7 +154,7 @@ fn match_line(line: &str, query: &str, config: &SearchConfig) -> Result<bool, Bo
 
 fn format_output(line_num: usize, line: &str, config: &SearchConfig) -> String {
     if config.line_number {
-        format!("{}:{}", line_num + 1, line)
+        format!("{:4}:{}", line_num + 1, line)
     } else {
         line.to_string()
     }
