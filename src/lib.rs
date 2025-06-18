@@ -79,7 +79,7 @@ pub fn search_recursive(root: &Path, query: &str, config: &SearchConfig) -> Resu
     for (_file_path, results) in buffer.iter() {
         let stderr = io::stderr();
         let mut handle = stderr.lock();
-        writeln!(handle, "In file: {}", _file_path.display()).unwrap();
+        writeln!(handle, "\nIn file: {}", _file_path.display()).unwrap();
         for line in results {
             println!("{}", line);
         }
