@@ -246,7 +246,7 @@ Pick three.";
         };
 
         assert_eq!(
-            vec!["2:safe, fast, productive."],
+            vec!["   2:safe, fast, productive."],
             search(query, contents, &config).unwrap()
         );
     }
@@ -268,7 +268,7 @@ Trust me.";
         };
 
         assert_eq!(
-            vec!["1:Rust:", "3:Trust me."],
+            vec!["   1:Rust:", "   3:Trust me."],
             search(query, contents, &config).unwrap()
         );
     }
@@ -372,7 +372,7 @@ Trust me.";
         };
 
         assert_eq!(
-            vec!["1:Rust:", "3:Pick three.", "4:Trust me."],
+            vec!["   1:Rust:", "   3:Pick three.", "   4:Trust me."],
             search(query, contents, &config).unwrap()
         );
     }
@@ -440,7 +440,7 @@ Welcome to the party";
         };
 
         assert_eq!(
-            vec!["1:Trust me", "3:Meet me at home"],
+            vec!["   1:Trust me", "   3:Meet me at home"],
             search(query, contents, &config).unwrap()
         );
     }
