@@ -1,5 +1,6 @@
 use ignore::WalkBuilder;
 use std::collections::VecDeque;
+use std::io::{self, Write};
 use std::sync::Mutex;
 use std::{error::Error, path::Path};
 use std::fs::read_to_string;
@@ -76,7 +77,9 @@ pub fn search_recursive(root: &Path, query: &str, config: &SearchConfig) -> Resu
 
     let buffer = output_buffer.lock().unwrap();
     for (_file_path, results) in buffer.iter() {
-        // println!("In file: {}", file_path.display());
+        let stderr = io::stderr();
+        let mut handle = stderr.lock();
+        writeln!(handle, "In file: {}", _file_path.display()).unwrap();
         for line in results {
             println!("{}", line);
         }
